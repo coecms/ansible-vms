@@ -1,0 +1,5 @@
+all:
+    hosts:
+        wiki.climate-cms.org:
+            ansible_host: 43.240.97.91
+            ansible_user: ec2-user
