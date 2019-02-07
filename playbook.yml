@@ -1,0 +1,98 @@
+---
+- hosts: wiki.climate-cms.org
+  tasks:
+      - name: test connection
+        ping:
+
+      - name: install scl
+        yum:
+            state: present
+            name: centos-release-scl.noarch
+        become: yes
+
+      - name: install packages
+        yum:
+            state: present
+            name:
+                - httpd
+                - postgresql-server
+                - python-psycopg2
+                - rh-php70
+                - rh-php70-php
+                - rh-php70-php-fpm
+                - rh-php70-php-pgsql
+                - rh-php70-php-xml
+                - rh-php70-php-intl
+                - rh-php70-php-gd
+                - rh-php70-php-mbstring
+        become: yes
+
+      - name: download mediawiki
+        unarchive:
+            src: https://releases.wikimedia.org/mediawiki/1.32/mediawiki-1.32.0.tar.gz
+            remote_src: yes
+            dest: /var/www/html
+            extra_opts:
+                - --strip-components=1
+            creates: /var/www/html/index.php
+        become: yes
+
+      - name: create fpm.conf
+        copy:
+            content: |
+                # PHP scripts setup 
+                ProxyPassMatch ^/(.*.php)$ fcgi://127.0.0.1:9000/var/www/html
+                Alias / /var/www/html/
+            dest: /etc/httpd/conf.d/fpm.conf
+            mode: 0644
+        become: yes
+
+      - name: setup postgres
+        command: postgresql-setup initdb
+        args:
+            creates: /var/lib/pgsql/data/postgresql.conf
+        become: yes
+
+      - name: postgres auth
+        blockinfile:
+            path: /var/lib/pgsql/data/pg_hba.conf
+            insertbefore: IPv4 local connections
+            block: |
+                host wikidb wikiuser 127.0.0.1/32 md5
+                host wikidb wikiuser ::1/128 md5
+        become: yes
+
+      - name: restart postgres
+        service:
+            name: postgresql
+            enabled: yes
+            state: restarted
+        become: yes
+
+      - name: restart php-fpm
+        service:
+            name: rh-php70-php-fpm.service
+            enabled: yes
+            state: restarted
+        become: yes
+
+      - name: restart apache
+        service:
+            name: httpd
+            enabled: yes
+            state: restarted
+        become: yes
+
+      - name: wiki db user
+        postgresql_user:
+            name: wikiuser
+            role_attr_flags: NOCREATEDB,NOCREATEROLE,NOSUPERUSER
+        become: yes
+        become_user: postgres
+
+      - name: wiki db
+        postgresql_db:
+            name: wikidb
+            owner: wikiuser
+        become: yes
+        become_user: postgres
